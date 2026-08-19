@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kinder-Schatzkompass</title>
+    <style>
+        body {
+            font-family: 'Arial Rounded MT Bold', sans-serif;
+            background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+            color: #333;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        h1 { font-size: 28px; margin-bottom: 5px; color: #5d4037; }
+        #status { font-size: 16px; color: #d84315; margin: 15px; font-weight: bold; background: rgba(255,255,255,0.6); padding: 10px; border-radius: 10px; }
+        #compass-container {
+            width: 280px;
+            height: 280px;
+            border-radius: 50%;
+            background: #fff8e1;
+            border: 10px solid #8d6e63;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            margin-bottom: 30px;
+        }
+        #arrow {
+            width: 0;
+            height: 0;
+            border-left: 25px solid transparent;
+            border-right: 25px solid transparent;
+            border-bottom: 120px solid #d84315;
+            position: absolute;
+            transform-origin: 50% 80%;
+            transition: transform 0.1s ease-out;
+        }
+        #distance-box {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px 30px;
+            border-radius: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            padding: 20px 40px;
+            font-size: 22px;
+            background-color: #4caf50;
+            color: white;
+            border: none;
+            border-radius: 15px;
+            cursor: pointer;
+            box-shadow: 0 6px 10px rgba(0,0,0,0.2);
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Ahoi, Schatzsucher! 🏴‍☠️</h1>
+    <div id="status">Klicke auf Start, um das Abenteuer zu beginnen!</div>
+
+    <button id="startBtn">Kompass Starten</button>
+
+    <div id="compass-container" style="display:none;">
+        <div id="arrow"></div>
+    </div>
+
+    <div id="distance-box" style="display:none;">
+        Noch <span id="distance">-</span> Meter
+    </div>
+
+    <script>
+        const TARGET_LAT = 47.58752; 
+        const TARGET_LNG = 9.34002;  
+
+        let userLat = null;
+        let userLng = null;
+        let deviceOrientation = 0;
+        let bearingToTarget = 0;
+
+        const startBtn = document.getElementById('startBtn');
+        const statusDiv = document.getElementById('status');
+        const compassContainer = document.getElementById('compass-container');
+        const distanceBox = document.getElementById('distance-box');
+        const arrow = document.getElementById('arrow');
+        const distanceSpan = document.getElementById('distance');
+
+        startBtn.addEventListener('click', async () => {
+            startBtn.style.display = 'none';
+            statusDiv.innerText = "Prüfe Sensoren...";
+            initGPS();
+            initCompass();
+        });
+
+        function initGPS() {
+            if (navigator.geolocation) {
+                navigator.geolocation.watchPosition((position) => {
+                    userLat = position.coords.latitude;
+                    userLng = position.coords.longitude;
+                    compassContainer.style.display = 'flex';
+                    distanceBox.style.display = 'block';
+                    statusDiv.innerText = "GPS aktiv! Suche Richtung...";
+                    updateNavigation();
+                }, (err) => {
+                    statusDiv.innerText = "Fehler: GPS-Zugriff verweigert! Bitte in den Einstellungen erlauben.";
+                }, { enableHighAccuracy: true, maximumAge: 0 });
+            } else {
+                statusDiv.innerText = "Fehler: Kein GPS vorhanden.";
+            }
+        }
+
+        function initCompass() {
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            window.addEventListener('deviceorientation', handleOrientation, true);
+                        } else {
+                            statusDiv.innerText = "Fehler: Kompass auf dem iPhone abgelehnt.";
+                        }
+                    })
+                    .catch(() => {
+                        statusDiv.innerText = "Fehler beim Laden des iOS-Kompasses.";
+                    });
+            } else {
+                if ('ondeviceorientationabsolute' in window) {
+                    window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+                } else if ('ondeviceorientation' in window) {
+                    window.addEventListener('deviceorientation', handleOrientation, true);
+                } else {
+                    statusDiv.innerText = "Fehler: Richtungssensor fehlt.";
+                }
+            }
+        }
+
+        function handleOrientation(event) {
+            if (event.webkitCompassHeading) {
+                deviceOrientation = event.webkitCompassHeading;
+            } else if (event.alpha !== null) {
+                deviceOrientation = event.absolute ? event.alpha : 360 - event.alpha;
+            }
+            updateNavigation();
+        }
+
+        function updateNavigation() {
+            if (!userLat || !userLng) return;
+
+            statusDiv.innerText = "Kompass läuft! Sucht den Schatz!";
+
+            const R = 6371000; 
+            const dLat = (TARGET_LAT - userLat) * Math.PI / 180;
+            const dLng = (TARGET_LNG - userLng) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(userLat * Math.PI / 180) * Math.cos(TARGET_LAT * Math.PI / 180) *
+                      Math.sin(dLng/2) * Math.sin(dLng/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const distance = Math.round(R * c);
+
+            if (distance <= 6) {
+                distanceBox.innerHTML = "🎉 GEFUNDEN! Hier vergraben! 🎉";
+                arrow.style.borderBottomColor = "#4caf50";
+                arrow.style.transform = "rotate(0deg)";
+                return;
+            } else {
+                distanceSpan.innerText = distance;
+                arrow.style.borderBottomColor = "#d84315";
+            }
+
+            const lat1 = userLat * Math.PI / 180;
+            const lat2 = TARGET_LAT * Math.PI / 180;
+            const dLng2 = (TARGET_LNG - userLng) * Math.PI / 180;
+            
+            const y = Math.sin(dLng2) * Math.cos(lat2);
+            const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng2);
+            bearingToTarget = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+
+            let arrowDirection = bearingToTarget - deviceOrientation;
+            arrow.style.transform = `rotate(${arrowDirection}deg)`;
+        }
+    </script>
+</body>
+</html>
